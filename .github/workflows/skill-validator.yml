@@ -1,0 +1,40 @@
+name: skill-validator
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - skills/**
+      - .github/workflows/skill-validator.yml
+  pull_request:
+    paths:
+      - skills/**
+      - .github/workflows/skill-validator.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SKILL_VALIDATOR_VERSION: 1.5.6
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install skill-validator
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="$SKILL_VALIDATOR_VERSION"
+          cd "$RUNNER_TEMP"
+          gh release download "v$v" -R agent-ecosystem/skill-validator \
+            -p "skill-validator_${v}_linux_amd64.tar.gz" -p "skill-validator_${v}_checksums.txt"
+          sha256sum -c --ignore-missing "skill-validator_${v}_checksums.txt"
+          tar xzf "skill-validator_${v}_linux_amd64.tar.gz" skill-validator
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      - name: skill-validator check --strict
+        run: skill-validator check --strict --emit-annotations skills

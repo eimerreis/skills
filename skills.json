@@ -1,0 +1,70 @@
+{
+  "$comment": "Third-party agent skills for all machines. Edit by hand; bin/sync installs what is listed and removes other npx-installed skills. Own skills live in skills/ (tracked in git).",
+  "agents": [
+    "amp",
+    "cline",
+    "codex",
+    "cursor",
+    "droid",
+    "fx",
+    "gemini-cli",
+    "github-copilot",
+    "kilo",
+    "kimi-code-cli",
+    "opencode",
+    "pi",
+    "warp",
+    "zed"
+  ],
+  "skills": {
+    "mattpocock/skills": [
+      "ask-matt",
+      "chief-of-staff",
+      "claude-handoff",
+      "code-review",
+      "codebase-design",
+      "diagnosing-bugs",
+      "domain-modeling",
+      "git-guardrails-claude-code",
+      "grill-me",
+      "grill-with-docs",
+      "grilling",
+      "handoff",
+      "implement",
+      "implement-spec",
+      "improve-codebase-architecture",
+      "loop-me",
+      "migrate-to-shoehorn",
+      "pr",
+      "prototype",
+      "research",
+      "retro",
+      "scaffold-exercises",
+      "setup-matt-pocock-skills",
+      "setup-pre-commit",
+      "setup-ts-deep-modules",
+      "tdd",
+      "teach",
+      "to-questionnaire",
+      "to-spec",
+      "to-tickets",
+      "triage",
+      "wait-what",
+      "wayfinder",
+      "wizard",
+      "writing-beats",
+      "writing-for-agents",
+      "writing-fragments",
+      "writing-shape"
+    ],
+    "GoogleChrome/modern-web-guidance": [
+      "modern-web-guidance"
+    ],
+    "ParthJadhav/app-store-screenshots": [
+      "app-store-screenshots"
+    ],
+    "pbakaus/impeccable": [
+      "impeccable"
+    ]
+  }
+}

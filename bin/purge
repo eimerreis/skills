@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Remove local-only skills: npx-installed skills that neither the committed skills.json (HEAD)
+# nor skills.local.json declares, e.g. ones tried out with `skills install`. Their uncommitted
+# skills.json entries go too. Own skills and local-path installs (work in progress) stay.
+#
+#   skills purge [--dry-run]
+#
+# Bash 3.2 compatible (macOS).
+set -eo pipefail
+
+. "$(dirname "$0")/lib.sh"
+
+dry=0
+for arg in "$@"; do
+  case "$arg" in
+    -n | --dry-run) dry=1 ;;
+    *) echo "usage: skills purge [--dry-run]" >&2; exit 2 ;;
+  esac
+done
+need_tools
+
+committed=$(sk show HEAD:skills.json 2>/dev/null || echo '{}')
+keep=$({ declared <<<"$committed"; local_declared; } | sort -u)
+own=$(own_skills)
+local_ones=$(local_installs)
+purge=()
+for n in $(locked); do
+  grep -qxF "$n" <<<"$keep" && continue
+  grep -qxF "$n" <<<"$own" && continue
+  grep -qxF "$n" <<<"$local_ones" && continue
+  purge+=("$n")
+done
+# Uncommitted skills.json entries, also when the skill is not installed (anymore)
+if [[ -f "$MANIFEST" ]]; then
+  for n in $(declared <"$MANIFEST"); do
+    grep -qxF "$n" <<<"$keep" && continue
+    printf '%s\n' "${purge[@]}" | grep -qxF "$n" || purge+=("$n")
+  done
+fi
+
+if [[ ${#purge[@]} -eq 0 ]]; then
+  say "no local-only skills"
+  exit 0
+fi
+if [[ $dry == 1 ]]; then
+  say "would remove: ${purge[*]}"
+  exit 0
+fi
+
+installed=()
+for n in "${purge[@]}"; do grep -qxF "$n" <<<"$(locked)" && installed+=("$n"); done
+if [[ ${#installed[@]} -gt 0 ]]; then
+  npx -y skills remove "${installed[@]}" -g -y </dev/null >/dev/null 2>&1 || say "remove failed" >&2
+fi
+if [[ -f "$MANIFEST" ]]; then
+  tmp=$(mktemp "$MANIFEST.XXXXXX")
+  jq --argjson keep "$(jq '[.skills // {} | .[][]]' <<<"$committed")" '
+    .skills |= (map_values(map(select(. as $n | $keep | index($n)))) | with_entries(select(.value | length > 0)))' \
+    "$MANIFEST" >"$tmp"
+  mv "$tmp" "$MANIFEST"
+fi
+say "removed: ${purge[*]}"

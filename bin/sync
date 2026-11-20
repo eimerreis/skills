@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# Reconcile agent skills on this machine with ~/.agents/skills.json.
+#
+# - Own skills live in this repo (eimerreis/skills, work tree ~/.agents) under skills/.
+# - Third-party skills are declared in skills.json (hand-maintained):
+#     { "agents": [...], "skills": { "<npx skills source>": ["<skill>", ...] } }
+#   plus the optional, untracked skills.local.json for private sources (same "skills" shape).
+#   Missing ones are installed with `npx skills add -g`; skills installed by npx (per the
+#   machine-local ~/.agents/.skill-lock.json) but not declared are removed, except those
+#   installed from a local path (work in progress).
+# - Directories in skills/ that are neither tracked nor npx-installed are only reported.
+#
+#   ~/.agents/bin/sync            install missing, remove undeclared (the very first run on
+#                                 a machine only lists what it would remove)
+#   ~/.agents/bin/sync --pull     fast-forward this repo first
+#   ~/.agents/bin/sync --update   also update installed third-party skills
+#
+# Runs automatically after `skills pull` via .githooks/post-merge.
+# Bash 3.2 compatible (macOS).
+set -eo pipefail
+
+. "$(dirname "$0")/lib.sh"
+
+pull=0 update=0
+for arg in "$@"; do
+  case "$arg" in
+    --pull) pull=1 ;;
+    --update) update=1 ;;
+    *) echo "usage: $0 [--pull] [--update]" >&2; exit 2 ;;
+  esac
+done
+
+if [[ $pull == 1 ]]; then
+  export SKILLS_SYNC_RUNNING=1 # the post-merge hook would run sync a second time
+  sk fetch -q origin '+refs/heads/*:refs/remotes/origin/*'
+  sk merge --ff-only --autostash -q "origin/$(sk symbolic-ref --short HEAD)" ||
+    say "repo not fast-forwardable (local changes?) — pull skipped" >&2
+fi
+
+[[ -f "$MANIFEST" ]] || { say "no $MANIFEST"; exit 0; }
+need_tools || { say "skipped" >&2; exit 0; }
+
+# Never wait for hidden prompts (host keys, credentials): fail instead
+export GIT_TERMINAL_PROMPT=0
+export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes}"
+npx_skills() { npx -y skills "$@" </dev/null >/dev/null 2>&1; }
+own=$(own_skills)
+# Machine-local opt-out: sources matching any `skills.excludeSource` (git config of this
+# repo, substring match) are neither installed nor kept, e.g. work repos on a private Mac:
+#   skills config --add skills.excludeSource <work-org>
+excludes=$(sk config --get-all skills.excludeSource 2>/dev/null || true)
+manifest_json=$(merged_manifest | jq --arg ex "$excludes" '
+  ($ex | split("\n") | map(select(length > 0))) as $pats
+  | .skills |= with_entries(select(.key as $k | [$pats[] | select(. as $p | $k | contains($p))] | length == 0))')
+[[ -n "$excludes" ]] && say "excluding sources matching: $(tr '\n' ' ' <<<"$excludes")"
+wanted=$(jq -r '.skills | to_entries[] | .value[]' <<<"$manifest_json" | sort -u)
+read -ra agents <<<"$(jq -r '(.agents // []) | join(" ")' <<<"$manifest_json")"
+agent_args=()
+[[ ${#agents[@]} -gt 0 ]] && agent_args=(-a "${agents[@]}")
+
+# 1. Remove npx-installed skills that are not declared (own skills and local-path
+#    installs are never touched)
+extra=()
+local_ones=$(local_installs)
+for n in $(locked); do
+  grep -qxF "$n" <<<"$wanted" && continue
+  grep -qxF "$n" <<<"$own" && continue
+  grep -qxF "$n" <<<"$local_ones" && continue
+  extra+=("$n")
+done
+# First sync on a machine only reports: nothing is removed before you could declare it
+FIRST_SYNC_MARKER="$AGENTS_DIR/.skills-synced"
+if [[ ${#extra[@]} -gt 0 ]]; then
+  if [[ ! -e "$FIRST_SYNC_MARKER" ]]; then
+    say "first sync on this machine — NOT removing (add to skills.json to keep, else the next sync removes them):"
+    say "  ${extra[*]}"
+  else
+    say "removing ${extra[*]}"
+    npx_skills remove "${extra[@]}" -g -y || say "remove failed" >&2
+  fi
+fi
+touch "$FIRST_SYNC_MARKER"
+
+# 2. Install declared skills that are missing (on disk or in the lock), per source.
+#    Present on disk but absent from the lock = unknown provenance: reinstall to adopt it.
+locked_now=$(locked)
+jq -r '.skills | to_entries[] | [.key, (.value | join(" "))] | @tsv' <<<"$manifest_json" |
+  while IFS=$'\t' read -r src names; do
+    missing=()
+    for n in $names; do
+      [[ -d "$AGENTS_DIR/skills/$n" ]] && grep -qxF "$n" <<<"$locked_now" && continue
+      missing+=("$n")
+    done
+    if [[ ${#missing[@]} -eq 0 ]]; then
+      say "$src — all installed"
+      continue
+    fi
+    say "$src — installing ${missing[*]}"
+    # -s/-a take space-separated values
+    npx_skills add "$src" -g -y -s "${missing[@]}" "${agent_args[@]}" ||
+      say "install from $src failed (private sources need git access)" >&2
+  done
+
+# 3. Optional update of everything npx installed
+if [[ $update == 1 ]]; then
+  say "updating"
+  npx_skills update -g -y || say "update failed" >&2
+fi
+
+# 4. Report leftovers: neither own, nor declared, nor npx-installed
+locked_now=$(locked)
+for d in "$AGENTS_DIR"/skills/*/; do
+  n=$(basename "$d")
+  grep -qxF "$n" <<<"$own" && continue
+  grep -qxF "$n" <<<"$wanted" && continue
+  grep -qxF "$n" <<<"$locked_now" && continue
+  say "unmanaged: skills/$n (not in skills.json, not installed by npx skills — remove by hand if unwanted)"
+done

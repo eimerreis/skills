@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Try out a third-party skill: install it with `npx skills add -g` and declare it in
+# skills.json WITHOUT committing. Sync keeps it on this machine; commit + push skills.json
+# to keep it everywhere, or drop it again with `skills purge`.
+#
+#   skills install <source> [skill ...]   e.g. skills install vercel-labs/agent-skills
+#
+# Without skill names npx skills asks which ones to install.
+# Bash 3.2 compatible (macOS).
+set -eo pipefail
+
+. "$(dirname "$0")/lib.sh"
+
+[[ $# -ge 1 && "$1" != -* ]] || { echo "usage: skills install <source> [skill ...]" >&2; exit 2; }
+src="$1"; shift
+need_tools
+[[ -f "$MANIFEST" ]] || echo '{"agents": [], "skills": {}}' >"$MANIFEST"
+load_agent_args
+
+before=$(jq -c '.skills // {} | with_entries(.value |= .updatedAt)' "$LOCK" 2>/dev/null || echo '{}')
+if [[ $# -gt 0 ]]; then
+  npx -y skills add "$src" -g -y -s "$@" "${agent_args[@]}"
+else
+  npx -y skills add "$src" -g "${agent_args[@]}"
+fi
+
+# Declare what this run installed or refreshed, under the source as npx records it
+added=$(jq -c --argjson before "$before" '
+  [.skills // {} | to_entries[] | select($before[.key] != .value.updatedAt)
+   | {name: .key, source: .value.source}]' "$LOCK")
+if [[ "$(jq length <<<"$added")" -eq 0 ]]; then
+  say "nothing installed — skills.json unchanged"
+  exit 0
+fi
+own=$(own_skills)
+tmp=$(mktemp "$MANIFEST.XXXXXX")
+jq --argjson added "$added" --arg own "$own" '
+  ($own | split("\n")) as $own
+  | reduce ($added[] | select(.name as $n | $own | index($n) | not)) as $a (.;
+      .skills[$a.source] = ((.skills[$a.source] // []) + [$a.name] | unique))' "$MANIFEST" >"$tmp"
+mv "$tmp" "$MANIFEST"
+say "declared in skills.json (not committed): $(jq -r '[.[].name] | join(" ")' <<<"$added")"
+say "keep everywhere: skills commit -m '...' skills.json && skills push — drop: skills purge"

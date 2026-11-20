@@ -1,0 +1,4 @@
+#!/bin/sh
+# After `skills pull`: install third-party skills newly listed in .skill-lock.json.
+[ -n "$SKILLS_SYNC_RUNNING" ] && exit 0
+exec "$HOME/.agents/bin/sync"
