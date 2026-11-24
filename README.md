@@ -45,6 +45,9 @@ skills config alias.usage '!exec "$HOME/.agents/bin/audit-skill-usage"'
   Directories that are neither own, declared nor npx-installed are only reported.
   `--pull` fast-forwards this repo first, `--update` also updates installed skills.
   Runs after every `skills pull` (`.githooks/post-merge`).
+- **Claude Code** reads only `~/.claude/skills`: sync links every skill there
+  (`~/.claude/skills/<name>` → `~/.agents/skills/<name>`) and drops stale links.
+  Codex and OpenCode read `~/.agents/skills` directly.
 - `.skill-lock.json` is machine-local state of `npx skills` (not tracked).
 - **Per-machine opt-out**: `skills config --add skills.excludeSource <substring>` skips
   sources matching it (not installed, removed if present), e.g. a work org on a private

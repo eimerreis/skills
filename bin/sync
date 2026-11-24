@@ -116,3 +116,30 @@ for d in "$AGENTS_DIR"/skills/*/; do
   grep -qxF "$n" <<<"$locked_now" && continue
   say "unmanaged: skills/$n (not in skills.json, not installed by npx skills — remove by hand if unwanted)"
 done
+
+# 5. Claude Code reads only ~/.claude/skills (Codex and OpenCode read ~/.agents/skills):
+#    link every skill there, drop links whose skill is gone. Real directories in
+#    ~/.claude/skills (e.g. claude.ai's synced/) are never touched.
+CLAUDE_SKILLS="$HOME/.claude/skills"
+if [[ -d "$HOME/.claude" ]]; then
+  mkdir -p "$CLAUDE_SKILLS"
+  linked=0
+  for d in "$AGENTS_DIR"/skills/*/; do
+    [[ -f "$d/SKILL.md" ]] || continue
+    n=$(basename "$d") dst="$CLAUDE_SKILLS/$n"
+    if [[ -e "$dst" && ! -L "$dst" ]]; then
+      say "claude: $dst exists and is not a link — skipped"
+      continue
+    fi
+    [[ "$(readlink "$dst" 2>/dev/null)" == "$AGENTS_DIR/skills/$n" ]] && continue
+    ln -sfn "$AGENTS_DIR/skills/$n" "$dst"
+    linked=$((linked + 1))
+  done
+  for l in "$CLAUDE_SKILLS"/*; do
+    [[ -L "$l" && "$(readlink "$l")" == "$AGENTS_DIR/skills/"* && ! -e "$l" ]] || continue
+    rm -f "$l"
+    say "claude: removed stale link $(basename "$l")"
+  done
+  # An if, not &&: a false test as the last command would make sync exit 1
+  if [[ $linked -gt 0 ]]; then say "claude: linked $linked skill(s) into $CLAUDE_SKILLS"; fi
+fi
