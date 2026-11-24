@@ -11,6 +11,11 @@
 
 - Treat codebases as if you were the owner and long-term maintainer of this codebase, and its design is up to you.
 
+## Pull requests
+
+- Asked to merge once checks are green: run `gh pr merge --auto --squash <pr>` right after opening the PR, and GitHub merges when the required checks pass. Fall back to watching checks only where auto-merge is disabled.
+- Never poll checks with `sleep` loops.
+
 ## Effort estimates
 
 - Coding agent does the work → estimate in agent terms: scope (files/modules/systems touched), complexity, risk, unknowns; size S/M/L.
