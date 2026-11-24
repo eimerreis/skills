@@ -76,6 +76,24 @@
       "higgsfield-video-explainer",
       "higgsfield-websites",
       "higgsfield-youtube-thumbnail"
+    ],
+    "jakubkrehel/skills": [
+      "afk",
+      "better-accessibility",
+      "better-colors",
+      "better-interface",
+      "better-layout",
+      "better-motion",
+      "better-typography",
+      "better-ui",
+      "better-writing",
+      "break",
+      "build-design",
+      "explain-interface",
+      "interface-review",
+      "state-machine",
+      "upskill",
+      "variant"
     ]
   }
 }
