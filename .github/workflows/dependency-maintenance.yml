@@ -1,0 +1,30 @@
+# Nightly: merge Dependabot pull requests that pass, let opencode repair the ones that fail.
+# See https://github.com/eimerreis/devops/blob/main/docs/dependency-maintenance.md
+name: Dependency maintenance
+
+on:
+  schedule:
+    - cron: "20 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-maintenance
+  cancel-in-progress: false
+
+jobs:
+  dependencies:
+    name: dependencies
+    uses: eimerreis/devops/.github/workflows/dependency-maintenance.yml@f800d673023c281b3445c7ac2958b72369cc567a # main, 2026-11-25
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      DEPENDENCY_BOT_TOKEN: ${{ secrets.DEPENDENCY_BOT_TOKEN }}
+    with:
+      bun-version: latest
+      majors: review
+      verify: |
+        bun install --frozen-lockfile
+        bun run typecheck
+        bun test
